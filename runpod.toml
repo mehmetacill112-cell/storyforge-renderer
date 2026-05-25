@@ -1,0 +1,35 @@
+# RunPod CLI configuration for storyforge-renderer.
+# Manual create via REST shown in deploy notes — this file is reference only.
+
+name = "storyforge-renderer"
+image_name = "ghcr.io/mehmetacill112-cell/storyforge-renderer:latest"
+
+[endpoint]
+endpoint_id = ""                           # set after first manual create
+network_volume_id = "z0jl8dbtgo"           # EU-RO-1, storyforge-models
+min_cuda_version = "13.0"
+gpu_types = [
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA L40S",
+    "NVIDIA L40",
+    "NVIDIA RTX 6000 Ada Generation",
+    "NVIDIA RTX A6000",
+]
+workers_min = 0
+workers_max = 5
+workers_standby = 5
+flashboot = true
+idle_timeout = 30
+execution_timeout_ms = 1_200_000     # 20 min hard cap per job
+scaler_type = "QUEUE_DELAY"
+scaler_value = 4
+container_disk_gb = 50               # extra room for HF tokenizer caches if needed
+data_centers = ["EU-RO-1"]           # match volume DC
+
+[env]
+HF_HUB_OFFLINE = "1"
+TRANSFORMERS_OFFLINE = "1"
+HF_DATASETS_OFFLINE = "1"
+PYTHONUNBUFFERED = "1"
+LOG_LEVEL = "INFO"
