@@ -49,9 +49,7 @@ def load_flux_pipe():
         # raw safetensors files — load them via Diffusers' single-file utilities
         # for each component, then assemble a pipeline.
         from diffusers import AutoencoderKL, FluxTransformer2DModel
-        from diffusers.loaders.single_file import (
-            FromOriginalModelMixin,  # noqa: F401  (re-export check)
-        )
+        # (removed unused FromOriginalModelMixin import — moved/renamed in diffusers 0.32+)
         from transformers import (
             CLIPTextModel, CLIPTokenizer,
             T5EncoderModel, T5TokenizerFast,
