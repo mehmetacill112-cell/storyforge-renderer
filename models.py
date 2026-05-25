@@ -88,8 +88,24 @@ def load_flux_pipe():
         ).to(DEVICE)
         tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
 
-        log.info("  building T5XXL from FLUX config + volume safetensors %s", volume.FLUX_T5XXL)
-        t5_config = T5Config.from_pretrained(FLUX_REPO, subfolder="text_encoder_2")
+        log.info("  building T5XXL with hardcoded FLUX.1-dev dims + volume safetensors %s",
+                 volume.FLUX_T5XXL)
+        # T5Config.from_pretrained(..., subfolder=...) silently returned T5-base
+        # defaults (d_model=512) instead of reading FLUX.1-dev/text_encoder_2/config.json
+        # which has d_model=4096. Hardcode the FLUX T5XXL dims to avoid the subfolder
+        # resolution quirk entirely.
+        t5_config = T5Config(
+            d_model=4096, d_ff=10240, d_kv=64,
+            num_heads=64, num_layers=24,
+            vocab_size=32128,
+            feed_forward_proj="gated-gelu",
+            tie_word_embeddings=False,
+            is_encoder_decoder=False,
+            layer_norm_epsilon=1e-6,
+            relative_attention_num_buckets=32,
+            dropout_rate=0.1,
+            initializer_factor=1.0,
+        )
         text_encoder_2 = T5EncoderModel(t5_config).to(DTYPE)
         t5_state = load_safetensors(str(volume.FLUX_T5XXL))
         missing, unexpected = text_encoder_2.load_state_dict(t5_state, strict=False)
@@ -98,9 +114,8 @@ def load_flux_pipe():
         if unexpected:
             log.warning("  T5 unexpected keys (%d): %s", len(unexpected), unexpected[:5])
         text_encoder_2 = text_encoder_2.to(DEVICE)
-        tokenizer_2 = T5TokenizerFast.from_pretrained(
-            FLUX_REPO, subfolder="tokenizer_2",
-        )
+        # Tokenizer from ungated google T5XXL repo (tokenizer files only, no weights)
+        tokenizer_2 = T5TokenizerFast.from_pretrained("google/t5-v1_1-xxl")
 
         from diffusers import FlowMatchEulerDiscreteScheduler
         scheduler = FlowMatchEulerDiscreteScheduler()
