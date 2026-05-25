@@ -75,21 +75,22 @@ def load_flux_pipe():
             torch_dtype=DTYPE,
         ).to(DEVICE)
 
-        # CLIP-L + T5XXL: load from HF cache (already pre-staged via offline) or HF id.
-        # Since HF_HUB_OFFLINE=1, the FLUX repo must already be cached in the worker image
-        # or HF_HOME pointing into the volume. For now use HF id with offline ok if
-        # transformers cached locally.
-        # Safer: rely on Diffusers' from_pretrained with local files only.
-        # Fallback: install the FLUX tokenizer configs into the image at build time.
-        log.info("  loading FLUX text encoders (CLIP-L + T5)")
+        # CLIP-L + T5XXL: pull from FLUX.1-dev subfolders so we get the PyTorch
+        # weights (google/t5-v1_1-xxl publishes TF/Flax only — no pytorch_model.bin).
+        # HF_HOME points into the network volume so this caches once and reuses.
+        log.info("  loading FLUX text encoders (CLIP-L + T5) from %s", FLUX_REPO)
         text_encoder = CLIPTextModel.from_pretrained(
-            "openai/clip-vit-large-patch14", torch_dtype=DTYPE,
+            FLUX_REPO, subfolder="text_encoder", torch_dtype=DTYPE,
         ).to(DEVICE)
-        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+        tokenizer = CLIPTokenizer.from_pretrained(
+            FLUX_REPO, subfolder="tokenizer",
+        )
         text_encoder_2 = T5EncoderModel.from_pretrained(
-            "google/t5-v1_1-xxl", torch_dtype=DTYPE,
+            FLUX_REPO, subfolder="text_encoder_2", torch_dtype=DTYPE,
         ).to(DEVICE)
-        tokenizer_2 = T5TokenizerFast.from_pretrained("google/t5-v1_1-xxl")
+        tokenizer_2 = T5TokenizerFast.from_pretrained(
+            FLUX_REPO, subfolder="tokenizer_2",
+        )
 
         from diffusers import FlowMatchEulerDiscreteScheduler
         scheduler = FlowMatchEulerDiscreteScheduler()
