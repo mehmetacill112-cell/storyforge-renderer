@@ -75,19 +75,29 @@ def load_flux_pipe():
             torch_dtype=DTYPE,
         ).to(DEVICE)
 
-        # CLIP-L + T5XXL: pull from FLUX.1-dev subfolders so we get the PyTorch
-        # weights (google/t5-v1_1-xxl publishes TF/Flax only — no pytorch_model.bin).
-        # HF_HOME points into the network volume so this caches once and reuses.
-        log.info("  loading FLUX text encoders (CLIP-L + T5) from %s", FLUX_REPO)
+        # CLIP-L: load from public ungated openai repo (standard CLIP weights).
+        # T5XXL: build from FLUX config + manual state_dict load from volume
+        # safetensors (avoids the gated FLUX.1-dev/text_encoder_2 download path
+        # which fails resolution for sharded safetensors via from_pretrained).
+        from transformers import T5Config
+        from safetensors.torch import load_file as load_safetensors
+
+        log.info("  loading CLIP-L from openai/clip-vit-large-patch14")
         text_encoder = CLIPTextModel.from_pretrained(
-            FLUX_REPO, subfolder="text_encoder", torch_dtype=DTYPE,
+            "openai/clip-vit-large-patch14", torch_dtype=DTYPE,
         ).to(DEVICE)
-        tokenizer = CLIPTokenizer.from_pretrained(
-            FLUX_REPO, subfolder="tokenizer",
-        )
-        text_encoder_2 = T5EncoderModel.from_pretrained(
-            FLUX_REPO, subfolder="text_encoder_2", torch_dtype=DTYPE,
-        ).to(DEVICE)
+        tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-large-patch14")
+
+        log.info("  building T5XXL from FLUX config + volume safetensors %s", volume.FLUX_T5XXL)
+        t5_config = T5Config.from_pretrained(FLUX_REPO, subfolder="text_encoder_2")
+        text_encoder_2 = T5EncoderModel(t5_config).to(DTYPE)
+        t5_state = load_safetensors(str(volume.FLUX_T5XXL))
+        missing, unexpected = text_encoder_2.load_state_dict(t5_state, strict=False)
+        if missing:
+            log.warning("  T5 missing keys (%d): %s", len(missing), missing[:5])
+        if unexpected:
+            log.warning("  T5 unexpected keys (%d): %s", len(unexpected), unexpected[:5])
+        text_encoder_2 = text_encoder_2.to(DEVICE)
         tokenizer_2 = T5TokenizerFast.from_pretrained(
             FLUX_REPO, subfolder="tokenizer_2",
         )
