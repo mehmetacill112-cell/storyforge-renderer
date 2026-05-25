@@ -4,10 +4,11 @@ FROM runpod/pytorch:1.0.3-dev-fix-image-vulnerabilities-cu1300-torch291-ubuntu24
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    HF_HUB_OFFLINE=1 \
-    TRANSFORMERS_OFFLINE=1 \
-    HF_DATASETS_OFFLINE=1 \
     DEBIAN_FRONTEND=noninteractive
+# Online-with-cache strategy: HF_HUB_OFFLINE removed. Workers fetch tokenizer
+# configs + (on first cold start) FLUX/T5/CLIP repos to HF_HOME, then reuse the
+# cache on subsequent boots. HF_HOME is set on the endpoint to point into the
+# RunPod network volume so the cache survives worker rotation.
 
 # System deps: ffmpeg for video encoding
 RUN apt-get update && apt-get install -y --no-install-recommends \

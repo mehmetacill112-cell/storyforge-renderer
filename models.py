@@ -55,15 +55,24 @@ def load_flux_pipe():
             T5EncoderModel, T5TokenizerFast,
         )
 
-        # Sub-modules from volume
+        # Sub-modules from volume.
+        # NOTE: from_single_file() infers component config from the safetensors
+        # state-dict by default. For FLUX VAE (16-ch latent → 32-ch encoder.conv_out)
+        # diffusers falls back to the SD default (4-ch latent → 8-ch conv_out) and
+        # raises a shape mismatch. Pin the config explicitly to the FLUX.1-dev repo.
+        FLUX_REPO = "black-forest-labs/FLUX.1-dev"
         log.info("  loading FLUX transformer from %s", volume.FLUX_UNET)
         transformer = FluxTransformer2DModel.from_single_file(
-            str(volume.FLUX_UNET), torch_dtype=DTYPE,
+            str(volume.FLUX_UNET),
+            config=FLUX_REPO, subfolder="transformer",
+            torch_dtype=DTYPE,
         ).to(DEVICE)
 
         log.info("  loading FLUX VAE from %s", volume.FLUX_VAE)
         vae = AutoencoderKL.from_single_file(
-            str(volume.FLUX_VAE), torch_dtype=DTYPE,
+            str(volume.FLUX_VAE),
+            config=FLUX_REPO, subfolder="vae",
+            torch_dtype=DTYPE,
         ).to(DEVICE)
 
         # CLIP-L + T5XXL: load from HF cache (already pre-staged via offline) or HF id.
