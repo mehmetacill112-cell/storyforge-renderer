@@ -5,7 +5,7 @@ name = "storyforge-renderer"
 image_name = "ghcr.io/mehmetacill112-cell/storyforge-renderer:latest"
 
 [endpoint]
-endpoint_id = ""                           # set after first manual create
+endpoint_id = "dol92sassmp4c0"                # storyforge-renderer (created 2026-05-26)
 network_volume_id = "z0jl8dbtgo"           # EU-RO-1, storyforge-models
 min_cuda_version = "13.0"
 gpu_types = [
