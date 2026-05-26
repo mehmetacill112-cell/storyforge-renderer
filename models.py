@@ -202,6 +202,48 @@ def load_ltx_pipe():
         return _ltx_pipe
 
 
+_ip_adapter_loaded = False
+
+
+def attach_ip_adapter(pipeline, image, weight: float = 0.7) -> None:
+    """Attach FLUX IP-Adapter with the given reference image.
+
+    The IP-Adapter weights live on the volume at
+    /runpod-volume/models/ipadapter-flux/ip-adapter.bin and the SigLIP CLIP
+    vision encoder at /runpod-volume/models/clip_vision/siglip-so400m-patch14-384/.
+    They load lazily the first time chain-mode is used (5GB + 3.3GB).
+
+    `image` is a PIL Image — the character anchor frame.
+    """
+    global _ip_adapter_loaded
+    if not _ip_adapter_loaded:
+        try:
+            ipa_path = str(volume.IPADAPTER_FLUX)  # /runpod-volume/models/ipadapter-flux/ip-adapter.bin
+            siglip_dir = str(volume.CLIP_VISION_SIGLIP)  # siglip-so400m-patch14-384
+            log.info("loading FLUX IP-Adapter from %s (siglip=%s)", ipa_path, siglip_dir)
+            # Diffusers FluxPipeline.load_ip_adapter signature accepts a local
+            # path + subfolder or a (state_dict, image_encoder) pair. We pass
+            # the local repo path of the IPA weights plus the siglip encoder.
+            pipeline.load_ip_adapter(
+                str(Path(ipa_path).parent),
+                weight_name=Path(ipa_path).name,
+                image_encoder_pretrained_model_name_or_path=siglip_dir,
+            )
+            _ip_adapter_loaded = True
+        except Exception as e:
+            log.warning("ip_adapter_load_failed: %s — chain anchor disabled", e)
+            return
+    try:
+        pipeline.set_ip_adapter_scale(float(weight))
+        # The image is passed at __call__ time via ip_adapter_image kwarg, but
+        # to avoid changing render.py's call site signature heavily, we stash it
+        # on the pipeline; render.py's `pipe(**kwargs)` will pick it up.
+        pipeline._sf_ip_adapter_image = image  # type: ignore[attr-defined]
+        log.info("IP-Adapter attached weight=%.2f", weight)
+    except Exception as e:
+        log.warning("ip_adapter_attach_failed: %s", e)
+
+
 def apply_lora(pipeline, lora_name: str, weight: float = 0.8, adapter_name: str | None = None):
     """Load a LoRA from volume and attach to the pipeline's transformer."""
     if not lora_name:
