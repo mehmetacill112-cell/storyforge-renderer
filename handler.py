@@ -73,6 +73,23 @@ def handler(event: dict) -> dict:
             except Exception as e:
                 du_out = f"err: {e}"
             return {"usage": usage, "du": du_out}
+        if payload.get("op") == "audit_volume":
+            # Deep recursive listing — find unused/large files for cleanup decisions.
+            import subprocess
+            results = {}
+            for cmd, label in [
+                (["du","-sh","/runpod-volume/models/unet","/runpod-volume/models/clip","/runpod-volume/models/vae","/runpod-volume/models/checkpoints","/runpod-volume/models/text_encoders","/runpod-volume/models/upscale_models","/runpod-volume/models/ipadapter-flux","/runpod-volume/models/clip_vision","/runpod-volume/models/loras"], "by_subdir"),
+                (["bash","-c","ls -lhS /runpod-volume/models/loras/ 2>&1 | head -40"], "loras_by_size"),
+                (["bash","-c","ls -lh /runpod-volume/ 2>&1"], "root_listing"),
+                (["bash","-c","find /runpod-volume/models -maxdepth 2 -type d 2>&1 | head -30"], "model_dirs"),
+                (["bash","-c","du -sh /runpod-volume/wav2lip /runpod-volume/xtts /runpod-volume/tmp 2>&1 || true"], "non_model_dirs"),
+            ]:
+                try:
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    results[label] = r.stdout + (("\nERR:"+r.stderr) if r.stderr else "")
+                except Exception as e:
+                    results[label] = f"err: {e}"
+            return results
         if payload.get("op") == "clean_hf_cache":
             # Wipe HF_HOME contents — forces fresh download next cold start.
             import shutil
