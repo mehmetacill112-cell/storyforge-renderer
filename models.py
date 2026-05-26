@@ -52,7 +52,7 @@ def load_flux_pipe():
         # (removed unused FromOriginalModelMixin import — moved/renamed in diffusers 0.32+)
         from transformers import (
             CLIPTextModel, CLIPTokenizer,
-            T5EncoderModel, T5TokenizerFast,
+            T5EncoderModel, T5Tokenizer,
         )
 
         # Sub-modules from volume.
@@ -114,10 +114,11 @@ def load_flux_pipe():
         if unexpected:
             log.warning("  T5 unexpected keys (%d): %s", len(unexpected), unexpected[:5])
         text_encoder_2 = text_encoder_2.to(DEVICE)
-        # Tokenizer from FLUX_REPO subfolder — tiny files, gated but auth'd via HF_TOKEN.
-        # google/t5-v1_1-xxl has been intermittently failing for fresh workers (HF rate
-        # limit or transient unavailability), so prefer the already-authenticated repo.
-        tokenizer_2 = T5TokenizerFast.from_pretrained(
+        # Slow T5Tokenizer (pure Python) avoids T5TokenizerFast's runtime
+        # SentencePiece→fast conversion which needs sentencepiece+protobuf
+        # packages not present in the base image. Speed delta is negligible
+        # for short prompts (microseconds vs nanoseconds).
+        tokenizer_2 = T5Tokenizer.from_pretrained(
             FLUX_REPO, subfolder="tokenizer_2",
         )
 
