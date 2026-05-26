@@ -122,18 +122,21 @@ def load_flux_pipe():
             FLUX_REPO, subfolder="tokenizer_2",
         )
 
-        from diffusers import FlowMatchEulerDiscreteScheduler
-        scheduler = FlowMatchEulerDiscreteScheduler()
-
-        _flux_pipe = FluxPipeline(
+        # Use FluxPipeline.from_pretrained — it knows the exact __init__
+        # signature (including any new optional kwargs across diffusers
+        # versions). Pass our pre-loaded heavy modules as overrides; HF
+        # downloads only the scheduler config (tiny) and skips the rest.
+        log.info("  assembling FluxPipeline via from_pretrained override")
+        _flux_pipe = FluxPipeline.from_pretrained(
+            FLUX_REPO,
             transformer=transformer,
             vae=vae,
             text_encoder=text_encoder,
             tokenizer=tokenizer,
             text_encoder_2=text_encoder_2,
             tokenizer_2=tokenizer_2,
-            scheduler=scheduler,
-        )
+            torch_dtype=DTYPE,
+        ).to(DEVICE)
         _flux_pipe.set_progress_bar_config(disable=True)
 
         # Memory hygiene
