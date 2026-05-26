@@ -170,9 +170,23 @@ def load_ltx_pipe():
         log.info("loading LTX 2.3 22B distilled pipeline (diffusers.LTX2ImageToVideoPipeline)...")
 
         from diffusers.pipelines.ltx2 import LTX2ImageToVideoPipeline
+        from diffusers import AutoencoderKLLTX2Audio
+
+        # AudioVAE is a required component of LTX2ImageToVideoPipeline but is
+        # NOT bundled in the distilled checkpoint (which is video-only). Load
+        # it separately from the HF diffusers reference repo — ~50MB, caches
+        # to HF_HOME=/runpod-volume/hf-cache so subsequent cold starts reuse.
+        log.info("  loading AudioVAE (required by pipeline schema)")
+        audio_vae = AutoencoderKLLTX2Audio.from_pretrained(
+            "diffusers/LTX-2.3-Diffusers",
+            subfolder="audio_vae",
+            torch_dtype=DTYPE,
+        ).to(DEVICE)
+
         log.info("  LTX2ImageToVideoPipeline.from_single_file(%s)", volume.LTX_CKPT)
         _ltx_pipe = LTX2ImageToVideoPipeline.from_single_file(
             str(volume.LTX_CKPT),
+            audio_vae=audio_vae,
             config="diffusers/LTX-2.3-Diffusers",
             torch_dtype=DTYPE,
         ).to(DEVICE)
