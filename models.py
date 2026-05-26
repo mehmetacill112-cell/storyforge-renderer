@@ -157,7 +157,7 @@ def load_flux_pipe():
 
 
 def load_ltx_pipe():
-    """LTX 2.3 I2V pipeline — checkpoint + Gemma encoder + spatial upscaler."""
+    """LTX 2.3 22B distilled I2V pipeline — via diffusers LTX2Pipeline."""
     global _ltx_pipe
     if _ltx_pipe is not None:
         return _ltx_pipe
@@ -167,39 +167,18 @@ def load_ltx_pipe():
             return _ltx_pipe
 
         _ensure_volume()
-        log.info("loading LTX 2.3 I2V pipeline...")
+        log.info("loading LTX 2.3 22B distilled pipeline (diffusers.LTX2Pipeline)...")
 
-        # Try Diffusers LTXImageToVideoPipeline first (0.32+)
-        try:
-            from diffusers import LTXImageToVideoPipeline
-            log.info("  using diffusers.LTXImageToVideoPipeline")
-            # Diffusers expects a repo-style folder. For LTX 2.3 raw safetensors we use
-            # single_file_load (if supported). If not, fall through to ltx_video SDK.
-            _ltx_pipe = LTXImageToVideoPipeline.from_single_file(
-                str(volume.LTX_CKPT), torch_dtype=DTYPE,
-            ).to(DEVICE)
-            _ltx_pipe.set_progress_bar_config(disable=True)
-            log.info("LTX 2.3 pipeline ready via diffusers")
-            return _ltx_pipe
-        except Exception as e:
-            log.warning("diffusers LTX path failed (%s) — trying ltx_video SDK", e)
-
-        try:
-            from ltx_video.inference import create_ltx_video_pipeline
-            log.info("  building LTX 2.3 pipeline via ltx_video SDK")
-            _ltx_pipe = create_ltx_video_pipeline(
-                ckpt_path=str(volume.LTX_CKPT),
-                precision="bfloat16",
-                text_encoder_model_name_or_path=str(volume.LTX_GEMMA_DIR),
-                device=str(DEVICE),
-            )
-            log.info("LTX 2.3 pipeline ready via ltx_video SDK")
-            return _ltx_pipe
-        except ImportError:
-            raise RuntimeError(
-                "Neither diffusers LTX nor ltx_video SDK available. "
-                "Add `pip install git+https://github.com/Lightricks/LTX-Video` to Dockerfile."
-            )
+        from diffusers.pipelines.ltx2 import LTX2Pipeline
+        log.info("  LTX2Pipeline.from_single_file(%s)", volume.LTX_CKPT)
+        _ltx_pipe = LTX2Pipeline.from_single_file(
+            str(volume.LTX_CKPT),
+            config="diffusers/LTX-2.3-Diffusers",
+            torch_dtype=DTYPE,
+        ).to(DEVICE)
+        _ltx_pipe.set_progress_bar_config(disable=True)
+        log.info("LTX 2.3 pipeline ready (LTX2Pipeline)")
+        return _ltx_pipe
 
 
 def apply_lora(pipeline, lora_name: str, weight: float = 0.8, adapter_name: str | None = None):

@@ -23,16 +23,16 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --break-system-packages -r /app/requirements.txt
 
-# Lightricks LTX-Video repo for LTX 2.3 inference (Gemma loader + tiled VAE decode).
-# CRITICAL: ltx-video pulls in older transformers/hub/tokenizers that downgrade our base
-# AND can prune unrelated packages (smoke #11 lost `av` despite explicit install above).
-# Re-pin av + transformers AFTER ltx-video install to guarantee runtime presence.
-RUN pip install --no-cache-dir --break-system-packages \
-    "git+https://github.com/Lightricks/LTX-Video.git@main#egg=ltx-video" \
-    && pip install --no-cache-dir --break-system-packages --force-reinstall \
-        "av" "transformers>=4.45.0" "huggingface_hub>=0.27.0" "tokenizers" \
+# LTX 2.3 22B distilled support — needs diffusers main branch (LTX2Pipeline class,
+# added post-0.38.0 via PR #13217). The old Lightricks/LTX-Video repo was archived
+# Jan 2026 and redirects to LTX-2; trying to use it on a 2.3 22B checkpoint hits
+# VAE shape mismatch (different VideoVAE architecture). Diffusers' built-in LTX2
+# pipeline is the canonical loader.
+RUN pip install --no-cache-dir --break-system-packages --force-reinstall \
+    "git+https://github.com/huggingface/diffusers.git@main" \
+    "av" "transformers>=4.45.0" "huggingface_hub>=0.27.0" "tokenizers" \
     && python3 -c "import av; print('av ok', av.__version__)" \
-    && python3 -c "from ltx_video.inference import infer; print('ltx_video.inference ok')"
+    && python3 -c "from diffusers.pipelines.ltx2 import LTX2Pipeline; print('LTX2Pipeline ok')"
 
 # App code
 COPY handler.py models.py render.py volume.py /app/
