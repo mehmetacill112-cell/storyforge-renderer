@@ -29,6 +29,7 @@ def _ensure_volume() -> None:
             f"Volume not mounted at {volume.MODELS}. RunPod endpoint must bind "
             f"networkVolume containing /models/{{unet,clip,vae,checkpoints,loras,...}}"
         )
+    volume.assert_flux_files_present()
 
 
 def load_flux_pipe():
@@ -210,12 +211,18 @@ def apply_lora(pipeline, lora_name: str, weight: float = 0.8, adapter_name: str 
 
 
 def unload_loras(pipeline):
-    """Detach all LoRAs (between renders to avoid weight accumulation)."""
+    """Detach all LoRAs (between renders to avoid weight accumulation).
+
+    Clears the in-process registry even if the underlying pipeline call
+    raises — adapter accumulation across renders is worse than a noisy log,
+    and the registry tracks our intent regardless of pipeline state.
+    """
     try:
         pipeline.unload_lora_weights()
-        _loaded_loras.clear()
     except Exception as e:
-        log.warning("unload_loras failed: %s", e)
+        log.warning("pipeline.unload_lora_weights raised %s: %s — clearing registry anyway",
+                    type(e).__name__, e)
+    _loaded_loras.clear()
 
 
 def cleanup():

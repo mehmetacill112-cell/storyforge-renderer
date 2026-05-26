@@ -45,6 +45,27 @@ logging.basicConfig(
 log = logging.getLogger("handler")
 
 
+def _ensure_runtime_dirs() -> None:
+    """Create writable scratch + HF cache dirs on volume before first job runs.
+
+    RunPod containers ship a small / quota; redirecting TMPDIR + HF_*_CACHE to
+    volume avoids 'Disk quota exceeded' during multi-GB pulls. The Python libs
+    do NOT auto-create these dirs from env vars — must mkdir on startup.
+    """
+    paths = [
+        os.environ.get("TMPDIR", "/runpod-volume/tmp"),
+        os.environ.get("HF_HOME", "/runpod-volume/hf-cache"),
+        os.environ.get("HF_HUB_CACHE", "/runpod-volume/hf-cache/hub"),
+        os.environ.get("HF_XET_CACHE", "/runpod-volume/hf-cache/xet"),
+        os.environ.get("HF_ASSETS_CACHE", "/runpod-volume/hf-cache/assets"),
+    ]
+    for p in paths:
+        try:
+            os.makedirs(p, exist_ok=True)
+        except Exception as e:
+            log.warning("mkdir %s failed: %s", p, e)
+
+
 def handler(event: dict) -> dict:
     try:
         payload = (event or {}).get("input") or {}
@@ -120,6 +141,25 @@ def handler(event: dict) -> dict:
                 except Exception as e:
                     results[label] = f"err: {e}"
             return results
+        if payload.get("op") == "delete_path":
+            # Whitelisted file removal — only under /runpod-volume/ for safety.
+            from pathlib import Path
+            target = payload.get("path", "")
+            p = Path(target)
+            if not str(p).startswith("/runpod-volume/"):
+                return {"err": "path must be under /runpod-volume/"}
+            if not p.exists():
+                return {"err": f"path not found: {p}"}
+            size_before = p.stat().st_size if p.is_file() else 0
+            try:
+                if p.is_file():
+                    p.unlink()
+                else:
+                    import shutil
+                    shutil.rmtree(p)
+                return {"deleted": str(p), "freed_bytes": size_before}
+            except Exception as e:
+                return {"err": str(e)}
         if payload.get("op") == "clean_hf_cache":
             # Wipe HF_HOME contents — forces fresh download next cold start.
             import shutil
@@ -153,5 +193,6 @@ def handler(event: dict) -> dict:
 
 
 if __name__ == "__main__":
+    _ensure_runtime_dirs()
     log.info("Storyforge Renderer starting | volume models = %s", volume.MODELS)
     runpod.serverless.start({"handler": handler})

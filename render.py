@@ -61,7 +61,8 @@ def generate_first_frame(
     use_turbo_alpha: bool = True,
     guidance: float = 5.0,
     steps: int = 8,
-    negative_prompt: str = "text, watermark, morph, deformed, lowres, blurry, nsfw",
+    negative_prompt: str = "",
+    true_cfg_scale: float = 1.0,
 ) -> Image.Image:
     """FLUX first-frame generation with Turbo Alpha + style LoRA + optional char LoRA."""
     pipe = models.load_flux_pipe()
@@ -86,7 +87,10 @@ def generate_first_frame(
     log.info("FLUX render: %dx%d steps=%d cfg=%.1f loras=%s",
              width, height, steps, guidance, adapters)
 
-    result = pipe(
+    # FLUX-dev uses guidance distillation: standard negative_prompt is honored
+    # ONLY when true_cfg_scale > 1.0. Default behavior keeps cost low (single
+    # forward per step) and ignores negative. Caller can opt-in via payload.
+    pipe_kwargs = dict(
         prompt=prompt,
         width=width,
         height=height,
@@ -94,6 +98,10 @@ def generate_first_frame(
         guidance_scale=guidance,
         generator=gen,
     )
+    if negative_prompt and true_cfg_scale > 1.0:
+        pipe_kwargs["negative_prompt"] = negative_prompt
+        pipe_kwargs["true_cfg_scale"] = true_cfg_scale
+    result = pipe(**pipe_kwargs)
     return result.images[0]
 
 
@@ -178,6 +186,7 @@ def render(payload: dict) -> dict:
         steps=int(payload.get("flux_steps", 8)),
         guidance=float(payload.get("flux_guidance", 5.0)),
         negative_prompt=payload.get("negative_prompt", ""),
+        true_cfg_scale=float(payload.get("true_cfg_scale", 1.0)),
     )
     first_frame_b64 = base64.b64encode(_png_bytes(first_frame)).decode()
 

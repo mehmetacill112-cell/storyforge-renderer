@@ -62,3 +62,20 @@ IC_LORAS_LTX = {
 
 def known_loras() -> list[str]:
     return MYTHOLOGY_LORAS + BIBLE_LORAS + list(STYLE_LORAS.values()) + [TURBO_ALPHA_LORA] + list(IC_LORAS_LTX.values())
+
+
+def assert_flux_files_present() -> None:
+    """Per-file presence check — surfaces broken volume mount before the slow
+    pipeline init that would otherwise fail mid-load with a confusing trace."""
+    required = {
+        "FLUX_UNET": FLUX_UNET,
+        "FLUX_CLIP_L": FLUX_CLIP_L,
+        "FLUX_T5XXL": FLUX_T5XXL,
+        "FLUX_VAE": FLUX_VAE,
+    }
+    missing = [name for name, p in required.items() if not p.exists()]
+    if missing:
+        raise FileNotFoundError(
+            f"volume mounted but FLUX files missing: {missing}. "
+            f"Check /runpod-volume/models/{{unet,clip,vae}} on network volume."
+        )
