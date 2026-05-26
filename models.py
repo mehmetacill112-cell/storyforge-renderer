@@ -167,27 +167,21 @@ def load_ltx_pipe():
             return _ltx_pipe
 
         _ensure_volume()
-        log.info("loading LTX 2.3 22B distilled pipeline (diffusers.LTX2ImageToVideoPipeline)...")
+        log.info("loading LTX 2.3 22B distilled pipeline (from_pretrained dg845/LTX-2.3-Diffusers)...")
+
+        # LTX2ImageToVideoPipeline requires 8 wired components (scheduler, vae,
+        # audio_vae, text_encoder, tokenizer, connectors, transformer, vocoder).
+        # from_single_file on the distilled .safetensors fails because the file
+        # only carries transformer+vae; audio_vae/connectors/vocoder/text_encoder
+        # live in the reference HF repo. Easiest correct loader: from_pretrained
+        # which fetches the full pipeline (~50GB) into HF_HOME on first cold
+        # start and reuses cache afterwards.
+        os.environ.pop("HF_HUB_OFFLINE", None)
+        os.environ.pop("TRANSFORMERS_OFFLINE", None)
 
         from diffusers.pipelines.ltx2 import LTX2ImageToVideoPipeline
-        from diffusers import AutoencoderKLLTX2Audio
-
-        # AudioVAE is a required component of LTX2ImageToVideoPipeline but is
-        # NOT bundled in the distilled checkpoint (which is video-only). Load
-        # it separately from the HF diffusers reference repo — ~50MB, caches
-        # to HF_HOME=/runpod-volume/hf-cache so subsequent cold starts reuse.
-        log.info("  loading AudioVAE (required by pipeline schema)")
-        audio_vae = AutoencoderKLLTX2Audio.from_pretrained(
-            "diffusers/LTX-2.3-Diffusers",
-            subfolder="audio_vae",
-            torch_dtype=DTYPE,
-        ).to(DEVICE)
-
-        log.info("  LTX2ImageToVideoPipeline.from_single_file(%s)", volume.LTX_CKPT)
-        _ltx_pipe = LTX2ImageToVideoPipeline.from_single_file(
-            str(volume.LTX_CKPT),
-            audio_vae=audio_vae,
-            config="diffusers/LTX-2.3-Diffusers",
+        _ltx_pipe = LTX2ImageToVideoPipeline.from_pretrained(
+            "dg845/LTX-2.3-Diffusers",
             torch_dtype=DTYPE,
         ).to(DEVICE)
         _ltx_pipe.set_progress_bar_config(disable=True)
