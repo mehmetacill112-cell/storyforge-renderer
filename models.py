@@ -150,10 +150,14 @@ def load_flux_pipe():
             scheduler=scheduler,
         )
         _flux_pipe.set_progress_bar_config(disable=True)
-
-        # Memory hygiene
+        # FLUX (12B transformer + T5XXL 9.3GB + CLIP-L) + LTX 2.3 22B (38GB
+        # transformer + Gemma 12B) cannot both stay resident in an 80GB A100.
+        # model_cpu_offload swaps each pipeline's modules onto GPU only while
+        # actively in use, keeping the bulk in CPU RAM (host has ~150GB+).
+        # Inference is ~10% slower per pass but OOM is eliminated.
+        _flux_pipe.enable_model_cpu_offload()
         torch.cuda.empty_cache()
-        log.info("FLUX pipeline ready on %s dtype=%s", DEVICE, DTYPE)
+        log.info("FLUX pipeline ready on %s dtype=%s (cpu_offload enabled)", DEVICE, DTYPE)
     return _flux_pipe
 
 
@@ -183,12 +187,18 @@ def load_ltx_pipe():
         os.environ.pop("TRANSFORMERS_OFFLINE", None)
 
         from diffusers.pipelines.ltx2 import LTX2ImageToVideoPipeline
+        # NOTE: do NOT pre-move to DEVICE — enable_model_cpu_offload moves
+        # components as needed. Calling .to(DEVICE) here would defeat the
+        # offload and re-trigger the OOM observed in render v6 (FLUX 12B +
+        # T5XXL + LTX 22B + Gemma 12B = ~85GB > A100 80GB).
         _ltx_pipe = LTX2ImageToVideoPipeline.from_pretrained(
             "diffusers/LTX-2.3-Distilled-Diffusers",
             torch_dtype=DTYPE,
-        ).to(DEVICE)
+        )
         _ltx_pipe.set_progress_bar_config(disable=True)
-        log.info("LTX 2.3 pipeline ready (LTX2ImageToVideoPipeline)")
+        _ltx_pipe.enable_model_cpu_offload()
+        torch.cuda.empty_cache()
+        log.info("LTX 2.3 pipeline ready (cpu_offload enabled)")
         return _ltx_pipe
 
 
