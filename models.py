@@ -114,8 +114,12 @@ def load_flux_pipe():
         if unexpected:
             log.warning("  T5 unexpected keys (%d): %s", len(unexpected), unexpected[:5])
         text_encoder_2 = text_encoder_2.to(DEVICE)
-        # Tokenizer from ungated google T5XXL repo (tokenizer files only, no weights)
-        tokenizer_2 = T5TokenizerFast.from_pretrained("google/t5-v1_1-xxl")
+        # Tokenizer from FLUX_REPO subfolder — tiny files, gated but auth'd via HF_TOKEN.
+        # google/t5-v1_1-xxl has been intermittently failing for fresh workers (HF rate
+        # limit or transient unavailability), so prefer the already-authenticated repo.
+        tokenizer_2 = T5TokenizerFast.from_pretrained(
+            FLUX_REPO, subfolder="tokenizer_2",
+        )
 
         from diffusers import FlowMatchEulerDiscreteScheduler
         scheduler = FlowMatchEulerDiscreteScheduler()
