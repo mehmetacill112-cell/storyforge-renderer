@@ -114,9 +114,16 @@ def generate_video(
     pipe = models.load_ltx_pipe()
     length = _frames_for(duration_sec, fps)
 
-    # If diffusers path
-    if not isinstance(pipe, tuple):
-        # Optional IC-LoRA stack
+    # Detect pipeline type — diffusers LTXImageToVideoPipeline vs ltx_video SDK
+    # (LTXVideoPipeline). diffusers wrapper supports .set_adapters for IC-LoRAs;
+    # ltx_video SDK doesn't, so IC-LoRAs are diffusers-only.
+    from ltx_video.pipelines.pipeline_ltx_video import LTXVideoPipeline, ConditioningItem
+    import torchvision.transforms.functional as TVF
+
+    is_sdk = isinstance(pipe, LTXVideoPipeline)
+
+    if not is_sdk:
+        # diffusers path — supports IC-LoRA stack
         models.unload_loras(pipe)
         adapters = []
         weights = []
@@ -128,24 +135,45 @@ def generate_video(
             pipe.set_adapters(adapters, adapter_weights=weights)
 
         gen = torch.Generator(device=models.DEVICE).manual_seed(int(seed))
-        log.info("LTX 2.3 I2V: %dx%d length=%d duration=%.1fs ic_loras=%s",
-                 width, height, length, duration_sec, adapters)
-
+        log.info("LTX 2.3 I2V (diffusers): %dx%d length=%d ic_loras=%s",
+                 width, height, length, adapters)
         result = pipe(
-            prompt=prompt,
-            image=first_frame,
-            width=width,
-            height=height,
-            num_frames=length,
-            frame_rate=fps,
-            num_inference_steps=10,
-            generator=gen,
+            prompt=prompt, image=first_frame,
+            width=width, height=height,
+            num_frames=length, frame_rate=fps,
+            num_inference_steps=10, generator=gen,
         )
         frames = [np.asarray(f) for f in result.frames[0]]
         return _frames_to_mp4(frames, fps=fps)
 
-    # ltx_video SDK fallback path (TODO: integrate when needed)
-    raise RuntimeError("ltx_video SDK path not yet wired — install diffusers>=0.32 LTX support")
+    # ltx_video SDK path (LTX 2.3 22B distilled — diffusers can't load it).
+    # Convert PIL first_frame → tensor (b=1, c=3, f=1, h, w) for ConditioningItem.
+    img = first_frame.convert("RGB").resize((width, height))
+    media_tensor = TVF.to_tensor(img)           # (C, H, W) in [0, 1]
+    media_tensor = media_tensor.mul(2).sub(1)   # → [-1, 1] like LTX expects
+    media_tensor = media_tensor.unsqueeze(0).unsqueeze(2).to(models.DEVICE, dtype=torch.bfloat16)
+    # shape: (1, 3, 1, H, W)
+    conditioning = ConditioningItem(
+        media_item=media_tensor,
+        media_frame_number=0,
+        conditioning_strength=1.0,
+    )
+
+    gen = torch.Generator(device=models.DEVICE).manual_seed(int(seed))
+    log.info("LTX 2.3 I2V (SDK): %dx%d length=%d frame_rate=%d", width, height, length, fps)
+    result = pipe(
+        height=height, width=width,
+        num_frames=length, frame_rate=float(fps),
+        prompt=prompt, negative_prompt="",
+        num_inference_steps=10,
+        guidance_scale=4.5,
+        generator=gen,
+        conditioning_items=[conditioning],
+        output_type="pil",
+    )
+    # result.frames is List[List[PIL]] when output_type="pil"
+    frames = [np.asarray(f) for f in result.frames[0]]
+    return _frames_to_mp4(frames, fps=fps)
 
 
 def render(payload: dict) -> dict:

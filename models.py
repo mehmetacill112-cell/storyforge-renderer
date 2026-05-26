@@ -185,9 +185,15 @@ def load_ltx_pipe():
             log.warning("diffusers LTX path failed (%s) — trying ltx_video SDK", e)
 
         try:
-            from ltx_video.inference import infer  # type: ignore  # noqa
-            log.info("  ltx_video SDK available — handler will use it directly")
-            _ltx_pipe = ("ltx_video_sdk", str(volume.LTX_CKPT), str(volume.LTX_GEMMA_DIR))
+            from ltx_video.inference import create_ltx_video_pipeline
+            log.info("  building LTX 2.3 pipeline via ltx_video SDK")
+            _ltx_pipe = create_ltx_video_pipeline(
+                ckpt_path=str(volume.LTX_CKPT),
+                precision="bfloat16",
+                text_encoder_model_name_or_path=str(volume.LTX_GEMMA_DIR),
+                device=str(DEVICE),
+            )
+            log.info("LTX 2.3 pipeline ready via ltx_video SDK")
             return _ltx_pipe
         except ImportError:
             raise RuntimeError(
