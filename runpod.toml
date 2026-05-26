@@ -1,35 +1,37 @@
-# RunPod CLI configuration for storyforge-renderer.
-# Manual create via REST shown in deploy notes — this file is reference only.
+# RunPod serverless configuration — reference snapshot.
+# Authoritative state is now applied by .github/workflows/build.yml (deploy
+# job) which PATCHes the template via REST API after each main push.
 
 name = "storyforge-renderer"
 image_name = "ghcr.io/mehmetacill112-cell/storyforge-renderer:latest"
 
 [endpoint]
-endpoint_id = "dol92sassmp4c0"                # storyforge-renderer (created 2026-05-26)
-network_volume_id = "z0jl8dbtgo"           # EU-RO-1, storyforge-models
+endpoint_id = "dol92sassmp4c0"      # storyforge-renderer (created 2026-05-26)
+template_id = "rhawjehr4p"          # storyforge-renderer-tpl
+network_volume_id = "z0jl8dbtgo"    # EU-RO-1, storyforge-models, 200 GB
 min_cuda_version = "13.0"
-gpu_types = [
-    "NVIDIA A100-SXM4-80GB",
-    "NVIDIA A100 80GB PCIe",
-    "NVIDIA L40S",
-    "NVIDIA L40",
-    "NVIDIA RTX 6000 Ada Generation",
-    "NVIDIA RTX A6000",
-]
+gpu_pool_ids = "AMPERE_80,ADA_48_PRO,AMPERE_48,-NVIDIA A40"  # excludes A40
 workers_min = 0
 workers_max = 5
-workers_standby = 5
-flashboot = true
+flash_boot_type = "OFF"              # workers_standby = 0 (no idle billing)
 idle_timeout = 30
-execution_timeout_ms = 1_200_000     # 20 min hard cap per job
+execution_timeout_ms = 1_800_000     # 30 min (cold-start with 50GB LTX HF pull)
 scaler_type = "QUEUE_DELAY"
 scaler_value = 4
-container_disk_gb = 50               # extra room for HF tokenizer caches if needed
-data_centers = ["EU-RO-1"]           # match volume DC
+container_disk_gb = 50               # HF caches live on volume; / stays small
+data_centers = ["EU-RO-1"]           # implicit via volume's DC
 
+# Environment is provisioned by the CI deploy job. Cache paths point to the
+# network volume so 50GB LTX 2.3 + 12GB Gemma HF pulls survive worker rotation.
 [env]
-HF_HUB_OFFLINE = "1"
-TRANSFORMERS_OFFLINE = "1"
-HF_DATASETS_OFFLINE = "1"
-PYTHONUNBUFFERED = "1"
-LOG_LEVEL = "INFO"
+HF_HOME           = "/runpod-volume/hf-cache"
+HF_HUB_CACHE      = "/runpod-volume/hf-cache/hub"
+HF_XET_CACHE      = "/runpod-volume/hf-cache/xet"   # xet ignores HF_HOME
+HF_ASSETS_CACHE   = "/runpod-volume/hf-cache/assets"
+HF_HUB_OFFLINE    = "0"               # need network on first cold start
+TRANSFORMERS_OFFLINE = "0"
+HF_DATASETS_OFFLINE  = "0"
+TMPDIR            = "/runpod-volume/tmp"  # avoid container / quota for big temps
+PYTHONUNBUFFERED  = "1"
+LOG_LEVEL         = "INFO"
+# HF_TOKEN, IMAGE_REFRESH set by CI deploy job (secrets + timestamp).

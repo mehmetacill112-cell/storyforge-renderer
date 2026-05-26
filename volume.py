@@ -10,9 +10,11 @@ FLUX_CLIP_L = MODELS / "clip" / "clip_l.safetensors"             # 234 MB
 FLUX_T5XXL = MODELS / "clip" / "t5xxl_fp16.safetensors"          # 9.3 GB
 FLUX_VAE = MODELS / "vae" / "ae.safetensors"                     # 320 MB
 
-LTX_CKPT = MODELS / "checkpoints" / "ltx-2.3-22b-distilled-1.1.safetensors"  # 44 GB
-LTX_GEMMA_DIR = MODELS / "text_encoders" / "gemma-3-12b-it-qat-q4_0-unquantized"
-LTX_SPATIAL_UPSCALER = MODELS / "upscale_models" / "ltxv-spatial-upscaler-0.9.8.safetensors"
+# LTX 2.3 components are pulled from HF (diffusers/LTX-2.3-Distilled-Diffusers)
+# at first cold start into HF_HOME=/runpod-volume/hf-cache/. The local LTX/Gemma
+# files under MODELS were used by the old ComfyUI flow and are not referenced
+# by the current load_ltx_pipe(); they may be deleted from the volume to
+# reclaim space.
 
 LORAS = MODELS / "loras"
 IPADAPTER_FLUX = MODELS / "ipadapter-flux" / "ip-adapter.bin"

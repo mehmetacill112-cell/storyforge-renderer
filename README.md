@@ -62,25 +62,33 @@ POST /run
 ## Volume Layout
 
 ```
-/runpod-volume/models/
-├── unet/flux1-dev.safetensors                              # 22.7 GB
-├── clip/{clip_l, t5xxl_fp16}.safetensors
-├── vae/ae.safetensors
-├── checkpoints/ltx-2.3-22b-distilled-1.1.safetensors       # 44 GB
-├── text_encoders/gemma-3-12b-it-qat-q4_0-unquantized/      # LTX 2.3 Gemma encoder
-├── upscale_models/ltxv-spatial-upscaler-0.9.8.safetensors
-├── loras/
-│   ├── mythology__{zeus,thor,odin,loki,hades,athena,ra,anubis,...}.safetensors  # 15 chars
-│   ├── bible_stories_for_kids__{abraham,daniel,esther,...}.safetensors          # 10 chars
-│   ├── pixar_3d_canopus.safetensors        # style
-│   ├── ghibli_warm_openfree.safetensors    # style
-│   ├── flux_turbo_alpha_8step.safetensors  # 8-step accelerator
-│   ├── ltx23_iclora_hdr.safetensors
-│   ├── ltx23_iclora_motion_track.safetensors
-│   ├── ltx23_iclora_union_control.safetensors
-│   └── ltx23_iclora_lipdub.safetensors
-└── ipadapter-flux/ip-adapter.bin
+/runpod-volume/
+├── models/
+│   ├── unet/flux1-dev.safetensors                            # 22.7 GB — FLUX UNet
+│   ├── clip/{clip_l, t5xxl_fp16}.safetensors                 # FLUX CLIP-L + T5XXL
+│   ├── vae/ae.safetensors                                    # FLUX VAE
+│   ├── loras/
+│   │   ├── bible_stories_for_kids__{abraham,daniel,...}.safetensors  # 10 active chars
+│   │   ├── mythology__{zeus,thor,...}.safetensors                    # 15 chars (channel retired)
+│   │   ├── pixar_3d_canopus.safetensors        # style
+│   │   ├── ghibli_warm_openfree.safetensors    # style
+│   │   ├── lh_pixar_3d_style.safetensors       # style
+│   │   ├── flux_turbo_alpha_8step.safetensors  # 8-step accelerator
+│   │   ├── ltx23_iclora_{hdr,motion_track,union_control,lipdub}.safetensors  # parked
+│   ├── ipadapter-flux/ip-adapter.bin
+│   └── clip_vision/siglip-so400m-patch14-384/                # IPA reference encoder
+└── hf-cache/                                                 # auto-populated on first cold start
+    └── hub/models--diffusers--LTX-2.3-Distilled-Diffusers/   # ~50 GB
+        ├── transformer/        # LTX 2.3 22B distilled (8 shards)
+        ├── text_encoder/       # Gemma 3 12B IT (full precision)
+        ├── tokenizer/          # Gemma tokenizer
+        ├── vae/, audio_vae/, connectors/, vocoder/, processor/, scheduler/
 ```
+
+**Orphan files** (safe to delete to free space):
+- `checkpoints/ltx-2.3-22b-distilled-1.1.safetensors` (~43 GB) — old single-file LTX, replaced by HF `from_pretrained` chain
+- `text_encoders/gemma-3-12b-it-qat-q4_0-unquantized/` (~23 GB) — old q4_0 quantized Gemma, replaced by full-precision HF version
+- `upscale_models/ltxv-spatial-upscaler-0.9.8.safetensors` — unused by new pipeline
 
 ## Deployment
 
