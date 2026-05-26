@@ -88,6 +88,7 @@ jobs:
                 HF_HUB_CACHE: "/runpod-volume/hf-cache/hub",
                 HF_XET_CACHE: "/runpod-volume/hf-cache/xet",
                 HF_ASSETS_CACHE: "/runpod-volume/hf-cache/assets",
+                HF_HUB_DISABLE_XET: "1",
                 HF_HUB_OFFLINE: "0",
                 TRANSFORMERS_OFFLINE: "0",
                 HF_DATASETS_OFFLINE: "0",
