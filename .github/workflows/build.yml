@@ -1,10 +1,14 @@
-name: build-and-push
-# trigger: 1d231ba 403 + 65e3fdd webhook skip — touch workflow to force fresh run
+name: build-and-push-deploy
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+env:
+  RUNPOD_TEMPLATE_ID: rhawjehr4p
+  RUNPOD_ENDPOINT_ID: dol92sassmp4c0
+  HF_HOME: /runpod-volume/hf-cache
 
 jobs:
   build:
@@ -12,6 +16,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      image_tag: ${{ steps.tag.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,12 +35,75 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - id: tag
+        run: echo "image_tag=ghcr.io/${{ github.repository_owner }}/storyforge-renderer:${{ github.sha }}" >> $GITHUB_OUTPUT
+
       - uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          provenance: false
+          sbom: false
           tags: |
             ghcr.io/${{ github.repository_owner }}/storyforge-renderer:latest
             ghcr.io/${{ github.repository_owner }}/storyforge-renderer:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    # Only auto-deploy when build came from a push to main (not workflow_dispatch
+    # tests). Skip if commit message contains "[skip deploy]" for emergency holds.
+    if: github.event_name == 'push' && !contains(github.event.head_commit.message, '[skip deploy]')
+    steps:
+      - name: Patch RunPod template + bump IMAGE_REFRESH
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
+        run: |
+          set -euo pipefail
+          NOW=$(date +%s)
+          PAYLOAD=$(jq -c -n \
+            --arg img "$IMAGE_TAG" \
+            --arg now "$NOW" \
+            --arg hf "$HF_TOKEN" \
+            '{
+              imageName: $img,
+              env: {
+                HF_HOME: "/runpod-volume/hf-cache",
+                HF_HUB_CACHE: "/runpod-volume/hf-cache/hub",
+                HF_XET_CACHE: "/runpod-volume/hf-cache/xet",
+                HF_ASSETS_CACHE: "/runpod-volume/hf-cache/assets",
+                HF_HUB_OFFLINE: "0",
+                TRANSFORMERS_OFFLINE: "0",
+                HF_DATASETS_OFFLINE: "0",
+                HF_TOKEN: $hf,
+                TMPDIR: "/runpod-volume/tmp",
+                IMAGE_REFRESH: $now,
+                LOG_LEVEL: "INFO",
+                PYTHONUNBUFFERED: "1"
+              }
+            }')
+          echo "PATCH template ${{ env.RUNPOD_TEMPLATE_ID }} → $IMAGE_TAG"
+          curl -fsSL -X PATCH \
+            "https://rest.runpod.io/v1/templates/${{ env.RUNPOD_TEMPLATE_ID }}" \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD" | jq '{imageName, env: (.env | {IMAGE_REFRESH, HF_XET_CACHE})}'
+
+      - name: Smoke ping (validate worker boots new image)
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Fire async ping, surface job ID for tracking; do not block deploy on
+          # GPU availability (EU-RO-1 can throttle and we don't want a 20min CI).
+          JOB=$(curl -fsSL -X POST \
+            "https://api.runpod.ai/v2/${{ env.RUNPOD_ENDPOINT_ID }}/run" \
+            -H "Authorization: Bearer $RUNPOD_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"input":{"op":"ping"}}' | jq -r .id)
+          echo "smoke ping job: $JOB"
+          echo "::notice title=Smoke job submitted::$JOB (poll /v2/${{ env.RUNPOD_ENDPOINT_ID }}/status/$JOB)"
