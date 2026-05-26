@@ -157,7 +157,7 @@ def load_flux_pipe():
 
 
 def load_ltx_pipe():
-    """LTX 2.3 22B distilled I2V pipeline — via diffusers LTX2Pipeline."""
+    """LTX 2.3 22B distilled I2V pipeline — via diffusers LTX2ImageToVideoPipeline."""
     global _ltx_pipe
     if _ltx_pipe is not None:
         return _ltx_pipe
@@ -167,17 +167,17 @@ def load_ltx_pipe():
             return _ltx_pipe
 
         _ensure_volume()
-        log.info("loading LTX 2.3 22B distilled pipeline (diffusers.LTX2Pipeline)...")
+        log.info("loading LTX 2.3 22B distilled pipeline (diffusers.LTX2ImageToVideoPipeline)...")
 
-        from diffusers.pipelines.ltx2 import LTX2Pipeline
-        log.info("  LTX2Pipeline.from_single_file(%s)", volume.LTX_CKPT)
-        _ltx_pipe = LTX2Pipeline.from_single_file(
+        from diffusers.pipelines.ltx2 import LTX2ImageToVideoPipeline
+        log.info("  LTX2ImageToVideoPipeline.from_single_file(%s)", volume.LTX_CKPT)
+        _ltx_pipe = LTX2ImageToVideoPipeline.from_single_file(
             str(volume.LTX_CKPT),
             config="diffusers/LTX-2.3-Diffusers",
             torch_dtype=DTYPE,
         ).to(DEVICE)
         _ltx_pipe.set_progress_bar_config(disable=True)
-        log.info("LTX 2.3 pipeline ready (LTX2Pipeline)")
+        log.info("LTX 2.3 pipeline ready (LTX2ImageToVideoPipeline)")
         return _ltx_pipe
 
 

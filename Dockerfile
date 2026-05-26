@@ -23,7 +23,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --break-system-packages -r /app/requirements.txt
 
-# LTX 2.3 22B distilled support — needs diffusers main branch (LTX2Pipeline class,
+# LTX 2.3 22B distilled support — needs diffusers main branch (LTX2ImageToVideoPipeline class,
 # added post-0.38.0 via PR #13217). The old Lightricks/LTX-Video repo was archived
 # Jan 2026 and redirects to LTX-2; trying to use it on a 2.3 22B checkpoint hits
 # VAE shape mismatch (different VideoVAE architecture). Diffusers' built-in LTX2
@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir --break-system-packages --force-reinstall \
     "git+https://github.com/huggingface/diffusers.git@main" \
     "av" "transformers>=4.45.0" "huggingface_hub>=0.27.0" "tokenizers" \
     && python3 -c "import av; print('av ok', av.__version__)" \
-    && python3 -c "from diffusers.pipelines.ltx2 import LTX2Pipeline; print('LTX2Pipeline ok')"
+    && python3 -c "from diffusers.pipelines.ltx2 import LTX2ImageToVideoPipeline; print('LTX2ImageToVideoPipeline ok')"
 
 # App code
 COPY handler.py models.py render.py volume.py /app/
