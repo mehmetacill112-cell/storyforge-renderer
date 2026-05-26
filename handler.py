@@ -73,6 +73,36 @@ def handler(event: dict) -> dict:
             except Exception as e:
                 du_out = f"err: {e}"
             return {"usage": usage, "du": du_out}
+        if payload.get("op") == "ltx_meta":
+            # Read LTX checkpoint metadata to identify exact config expected
+            from safetensors import safe_open
+            from pathlib import Path
+            ckpt = Path("/runpod-volume/models/checkpoints/ltx-2.3-22b-distilled-1.1.safetensors")
+            if not ckpt.exists():
+                return {"err": f"ckpt missing: {ckpt}"}
+            try:
+                with safe_open(str(ckpt), framework="pt") as f:
+                    meta = f.metadata() or {}
+                # Truncate config to readable size + extract top-level keys
+                import json
+                cfg = meta.get("config", "")
+                try:
+                    cfg_obj = json.loads(cfg) if cfg else {}
+                    cfg_keys = list(cfg_obj.keys())[:30]
+                    vae_keys = list(cfg_obj.get("vae", {}).keys())[:20] if isinstance(cfg_obj.get("vae"), dict) else "n/a"
+                except Exception:
+                    cfg_obj = {}
+                    cfg_keys = []
+                    vae_keys = "parse-err"
+                return {
+                    "meta_keys": list(meta.keys()),
+                    "cfg_top_keys": cfg_keys,
+                    "vae_keys": vae_keys,
+                    "cfg_snippet": cfg[:1500],
+                    "config_full_len": len(cfg),
+                }
+            except Exception as e:
+                return {"err": str(e)}
         if payload.get("op") == "audit_volume":
             # Deep recursive listing — find unused/large files for cleanup decisions.
             import subprocess
