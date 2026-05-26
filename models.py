@@ -122,21 +122,32 @@ def load_flux_pipe():
             FLUX_REPO, subfolder="tokenizer_2",
         )
 
-        # Use FluxPipeline.from_pretrained — it knows the exact __init__
-        # signature (including any new optional kwargs across diffusers
-        # versions). Pass our pre-loaded heavy modules as overrides; HF
-        # downloads only the scheduler config (tiny) and skips the rest.
-        log.info("  assembling FluxPipeline via from_pretrained override")
-        _flux_pipe = FluxPipeline.from_pretrained(
-            FLUX_REPO,
+        from diffusers import FlowMatchEulerDiscreteScheduler
+        scheduler = FlowMatchEulerDiscreteScheduler()
+
+        # Diagnostic — log type of each component before instantiation. Smoke #8
+        # hit 'bool' object has no attribute '__module__' in register_modules;
+        # find which kwarg is bool.
+        for name, obj in [
+            ("transformer", transformer), ("vae", vae),
+            ("text_encoder", text_encoder), ("tokenizer", tokenizer),
+            ("text_encoder_2", text_encoder_2), ("tokenizer_2", tokenizer_2),
+            ("scheduler", scheduler),
+        ]:
+            log.info("  FluxPipe arg %s: type=%s class=%s module=%s",
+                     name, type(obj).__name__,
+                     getattr(obj, '__class__', '?'),
+                     getattr(type(obj), '__module__', '?'))
+
+        _flux_pipe = FluxPipeline(
             transformer=transformer,
             vae=vae,
             text_encoder=text_encoder,
             tokenizer=tokenizer,
             text_encoder_2=text_encoder_2,
             tokenizer_2=tokenizer_2,
-            torch_dtype=DTYPE,
-        ).to(DEVICE)
+            scheduler=scheduler,
+        )
         _flux_pipe.set_progress_bar_config(disable=True)
 
         # Memory hygiene

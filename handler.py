@@ -58,6 +58,38 @@ def handler(event: dict) -> dict:
             return {"loras": volume.known_loras()}
         if payload.get("op") == "ping":
             return {"ok": True}
+        if payload.get("op") == "disk":
+            # Volume usage + HF cache size — for diagnosing "Disk quota exceeded".
+            import shutil, subprocess
+            usage = {}
+            for p in ["/runpod-volume", "/runpod-volume/models", "/runpod-volume/hf-cache", "/tmp", "/"]:
+                try:
+                    total, used, free = shutil.disk_usage(p)
+                    usage[p] = {"total_gb": round(total/1e9, 1), "used_gb": round(used/1e9, 1), "free_gb": round(free/1e9, 1)}
+                except Exception as e:
+                    usage[p] = f"err: {e}"
+            try:
+                du_out = subprocess.run(["du","-sh","/runpod-volume/hf-cache","/runpod-volume/models"], capture_output=True, text=True, timeout=30).stdout
+            except Exception as e:
+                du_out = f"err: {e}"
+            return {"usage": usage, "du": du_out}
+        if payload.get("op") == "clean_hf_cache":
+            # Wipe HF_HOME contents — forces fresh download next cold start.
+            import shutil
+            from pathlib import Path
+            cache = Path("/runpod-volume/hf-cache")
+            removed = []
+            if cache.exists():
+                for child in cache.iterdir():
+                    try:
+                        if child.is_dir():
+                            shutil.rmtree(child)
+                        else:
+                            child.unlink()
+                        removed.append(str(child))
+                    except Exception as e:
+                        removed.append(f"FAIL {child}: {e}")
+            return {"removed": removed, "count": len(removed)}
 
         result = render.render(payload)
         log.info("job done: frames=%d", result.get("length"))
