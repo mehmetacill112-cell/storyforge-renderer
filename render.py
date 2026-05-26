@@ -190,6 +190,9 @@ def render(payload: dict) -> dict:
     )
     first_frame_b64 = base64.b64encode(_png_bytes(first_frame)).decode()
 
+    # Free FLUX VRAM before LTX 22B+Gemma 12B load (A100 80GB can't hold both).
+    models.unload_flux()
+
     # 2) LTX 2.3 I2V
     mp4_bytes = generate_video(
         prompt=prompt,

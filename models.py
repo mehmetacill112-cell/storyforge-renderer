@@ -235,6 +235,46 @@ def unload_loras(pipeline):
     _loaded_loras.clear()
 
 
+def unload_flux() -> None:
+    """Free FLUX pipeline + components from VRAM before loading LTX.
+
+    cpu_offload was insufficient for our manually-constructed FluxPipeline
+    (components were .to(DEVICE) before pipeline init, so the offload hook
+    couldn't track them). Explicit del + gc + empty_cache reclaims the ~22GB
+    that FLUX holds (12B transformer bf16 + 9GB T5XXL + 250MB CLIP-L + LoRAs +
+    activations), letting LTX 22B + Gemma 12B + audio_vae fit on A100 80GB.
+    """
+    global _flux_pipe
+    if _flux_pipe is None:
+        return
+    try:
+        unload_loras(_flux_pipe)
+    except Exception:
+        pass
+    del _flux_pipe
+    _flux_pipe = None
+    _loaded_loras.clear()
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    log.info("FLUX unloaded — VRAM reclaimed before LTX load")
+
+
+def unload_ltx() -> None:
+    """Symmetric LTX unload (e.g., if next request needs FLUX-only path)."""
+    global _ltx_pipe
+    if _ltx_pipe is None:
+        return
+    del _ltx_pipe
+    _ltx_pipe = None
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    log.info("LTX unloaded — VRAM reclaimed")
+
+
 def cleanup():
     """Free CUDA memory between renders."""
     gc.collect()
