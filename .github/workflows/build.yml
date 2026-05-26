@@ -55,15 +55,12 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/storyforge-renderer:latest
             ghcr.io/${{ github.repository_owner }}/storyforge-renderer:${{ github.sha }}
-          # Dual cache: gha is fast in-workflow, registry persists across runs
-          # and re-uses already-pushed image layers as cache base (massive speedup
-          # for unchanged Dockerfile prefix — base+apt+pip layers reused).
-          cache-from: |
-            type=gha
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/storyforge-renderer:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=ghcr.io/${{ github.repository_owner }}/storyforge-renderer:buildcache,mode=max
+          # Registry-only cache: GHA cache backend can leave orphan refs when
+          # concurrency cancels mid-build (404 BlobNotFound). Registry cache via
+          # a dedicated :buildcache tag is concurrency-safe (each push writes the
+          # full manifest atomically) and persists across runs.
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/storyforge-renderer:buildcache
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/storyforge-renderer:buildcache,mode=max,image-manifest=true
 
   deploy:
     needs: build
