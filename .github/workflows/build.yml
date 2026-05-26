@@ -106,7 +106,36 @@ jobs:
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" | jq '{imageName, env: (.env | {IMAGE_REFRESH, HF_XET_CACHE})}'
 
-      - name: Smoke ping (validate worker boots new image)
+      - name: Force-drain warm workers (sync everyone to latest image)
+        env:
+          RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Warm workers DON'T auto-rotate when template imageName changes —
+          # they keep serving requests with their cached image until they idle
+          # out. Result: mixed-version cluster (audit 2026-05-26: latest27 +
+          # latest29 workers serving in parallel after a deploy).
+          # Fix: PATCH workersMax=0 to drain, wait, then bump back to 3.
+          gql() {
+            curl -fsSL -X POST -H "Authorization: Bearer $RUNPOD_API_KEY" \
+              -H "Content-Type: application/json" \
+              "https://api.runpod.io/graphql" -d "$1" | jq -r '.data // .errors'
+          }
+          DRAIN='{"query":"mutation { saveEndpoint(input: { id: \"dol92sassmp4c0\", name: \"storyforge-renderer\", templateId: \"rhawjehr4p\", networkVolumeId: \"z0jl8dbtgo\", gpuIds: \"AMPERE_80,ADA_48_PRO,AMPERE_48,-NVIDIA A40\", workersMin: 0, workersMax: 0, idleTimeout: 5, scalerType: \"QUEUE_DELAY\", scalerValue: 4, flashBootType: OFF }) { id workersMax } }"}'
+          RESTORE='{"query":"mutation { saveEndpoint(input: { id: \"dol92sassmp4c0\", name: \"storyforge-renderer\", templateId: \"rhawjehr4p\", networkVolumeId: \"z0jl8dbtgo\", gpuIds: \"AMPERE_80,ADA_48_PRO,AMPERE_48,-NVIDIA A40\", workersMin: 0, workersMax: 3, idleTimeout: 30, scalerType: \"QUEUE_DELAY\", scalerValue: 4, flashBootType: OFF }) { id workersMax } }"}'
+          echo "drain → workersMax=0"; gql "$DRAIN"
+          # Wait up to 90s for active jobs to finish + workers to die.
+          for i in 1 2 3 4 5 6 7 8 9; do
+            sleep 10
+            T=$(curl -fsSL -H "Authorization: Bearer $RUNPOD_API_KEY" \
+              "https://api.runpod.ai/v2/${{ env.RUNPOD_ENDPOINT_ID }}/health" \
+              | jq -r '.workers | (.idle + .initializing + .ready + .running + .throttled + .unhealthy)')
+            echo "[${i}0s] workers=$T"
+            [ "$T" = "0" ] && break
+          done
+          echo "restore → workersMax=3"; gql "$RESTORE"
+
+      - name: Smoke ping (validate fresh worker boots new image)
         env:
           RUNPOD_API_KEY: ${{ secrets.RUNPOD_API_KEY }}
         run: |
