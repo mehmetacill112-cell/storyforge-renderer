@@ -167,21 +167,23 @@ def load_ltx_pipe():
             return _ltx_pipe
 
         _ensure_volume()
-        log.info("loading LTX 2.3 22B distilled pipeline (from_pretrained dg845/LTX-2.3-Diffusers)...")
+        log.info("loading LTX 2.3 distilled pipeline (from_pretrained diffusers/LTX-2.3-Distilled-Diffusers)...")
 
         # LTX2ImageToVideoPipeline requires 8 wired components (scheduler, vae,
         # audio_vae, text_encoder, tokenizer, connectors, transformer, vocoder).
-        # from_single_file on the distilled .safetensors fails because the file
-        # only carries transformer+vae; audio_vae/connectors/vocoder/text_encoder
-        # live in the reference HF repo. Easiest correct loader: from_pretrained
-        # which fetches the full pipeline (~50GB) into HF_HOME on first cold
-        # start and reuses cache afterwards.
+        # from_single_file on the local .safetensors fails because the file only
+        # carries transformer+vae; the other components live in the reference HF
+        # repo. The canonical loader is from_pretrained against the official
+        # diffusers-org distilled repo (verified 2026-05-26: all 9 subfolders +
+        # model_index.json + README present, transformer 38GB sharded x8).
+        # First cold start pulls ~50GB into HF_HOME=/runpod-volume/hf-cache;
+        # subsequent cold starts reuse the cache.
         os.environ.pop("HF_HUB_OFFLINE", None)
         os.environ.pop("TRANSFORMERS_OFFLINE", None)
 
         from diffusers.pipelines.ltx2 import LTX2ImageToVideoPipeline
         _ltx_pipe = LTX2ImageToVideoPipeline.from_pretrained(
-            "dg845/LTX-2.3-Diffusers",
+            "diffusers/LTX-2.3-Distilled-Diffusers",
             torch_dtype=DTYPE,
         ).to(DEVICE)
         _ltx_pipe.set_progress_bar_config(disable=True)
